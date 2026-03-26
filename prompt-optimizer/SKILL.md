@@ -25,17 +25,11 @@ Redirect: *"This looks like a skill file — skill-token-optimizer is the right 
 
 ---
 
-## Prompt Failure Taxonomy
+## Diagnosis
 
-| Failure | Symptom | Fix |
-|---|---|---|
-| Under-constrained | Output varies wildly across runs | Add output format + exemplar |
-| Over-explained | Long prompt, mediocre output | Strip rationale; add constraints |
-| Role confusion | Generic, timid responses | Strong role declaration + anti-patterns |
-| Context overload | Claude loses the thread | Move context to references; keep prompt lean |
-| Format underspecified | Inconsistent structure | Specify format with template |
-| Implicit audience | Mismatch in depth/tone | State the reader explicitly |
-| Missing negative space | Claude hedges where you want conviction | Add "do not X" constraints |
+Diagnose failure mode before rewriting. Failure taxonomy → `references/failure-taxonomy.md`
+
+Common failure modes: under-constrained (output varies) | over-explained (long prompt, mediocre output) | role confusion (generic responses) | format underspecified (inconsistent structure) | missing negative space (Claude hedges).
 
 ---
 
@@ -86,19 +80,6 @@ Output format: [Exemplar or schema]
 - **Constraint inversion**: Describe the failure mode, not the desired quality ("Do not hedge" not "write with conviction")
 - **Output anchoring**: Specify the first word/phrase to eliminate preamble
 - **Persona loading**: Strong role declaration activates implicit behaviors — don't restate what the persona already loads
-
----
-
-## Prompt Quality Metrics
-| Metric | How to measure |
-|---|---|
-| Token count | word_count ÷ 0.75 |
-| Output consistency | Run 3×; variance? |
-| Format compliance | Match on first try? |
-| Failure rate | % runs needing follow-up |
-| Instruction-to-constraint ratio | >30% constraints → probably over-specified; cut rationales |
-
-Target: >90% consistency across 3 runs, no follow-up required.
 
 ---
 
