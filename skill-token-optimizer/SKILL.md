@@ -58,6 +58,20 @@ For before/after examples → `references/prose-source.md`
 
 ---
 
+## Technique Selection Routing
+
+```
+classify(section) → technique:
+  Reference  → T1 (move to references/)
+  Redundant  → delete
+  Verbose    → T6 first | then T9 if decision-tree shape | then T2/T4
+  Core+long  → T9 if decision-tree | T7 if code block | T3 if table >3 rows
+```
+
+Apply T1 before all others — it removes the most tokens without any compression risk.
+
+---
+
 ## Workflow
 
 **Single skill:** `audit → classify → apply(T1 first) → recount → verify behavioral intact → package`
@@ -79,6 +93,7 @@ comprehensive:   2500–4000    → target 1200–1800
 - "Do X, not Y" pairs (token-efficient per guidance unit)
 - Decision criteria (cutting → brittle edge-case behavior)
 - Compliance/legal specifics (precision > brevity)
+- Description triggers: optimize for trigger recall, not brevity — over-tightening descriptions reduces skill activation accuracy
 
 ---
 
