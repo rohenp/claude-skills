@@ -39,22 +39,21 @@ L1 is always loaded — it burns tokens on every call, not just when the skill t
 2. **Trigger recall**: Does the description activate on all intended queries? Over-tightening hurts recall. Optimize for accuracy, not brevity.
 3. **Format check**: Should follow `Use for: [CSV list]` | `Trigger: [CSV of literal phrases]` — no full sentences needed.
 
-### L2 Body Audit
+### L2 Body Audit — Closed-Loop Classification
 
-Measure before rewriting:
-1. Total tokens (word_count ÷ 0.75) + tokens by section
-2. Count: headers, bullets, tables, code blocks
-3. Flag reference-only content (lookup tables, competitor lists, benchmarks) → move to `references/`
-4. Flag content repeated across skills → move to `_shared/`
-5. Flag prose that restates what structure already implies
-6. Flag behavioral defaults that appear verbatim (or near-verbatim) in 3 or more skills → candidate for `_shared/behavioral-defaults.md`
+The classification step is a closed loop: check the Do-NOT-Compress list first, before applying any technique. A section that matches is assigned `Core+short` immediately and receives no further processing.
 
-Classify each section:
-- **Core** (behavioral — keep)
-- **Core+short** (behavioral AND already compact — preserve; compression risk > savings)
-- **Reference** (lookup — move out)
-- **Redundant** (delete)
-- **Verbose** (compress)
+**Classification order (apply in sequence, stop at first match):**
+
+1. Does the section match the Do-NOT-Compress list? → **Core+short — STOP. Apply no technique.**
+2. Is it reference-only content (lookup tables, competitor lists, benchmarks, historical data)? → **Reference** → T1 (move to `references/`)
+3. Does the same text appear verbatim or near-verbatim in 3+ skills? → **Redundant** → T5 or delete
+4. Is it prose that restates what the structure already implies? → **Redundant** → delete
+5. Is it behavioral AND already 3 lines or fewer? → **Core+short — STOP. Apply no technique.**
+6. Is it behavioral AND more than 3 lines? → **Core+long** → route to technique selection
+7. Is it verbose prose (rationale, preamble, "you should" hedges)? → **Verbose** → T6 first
+
+Flag behavioral defaults that appear verbatim (or near-verbatim) in 3 or more skills → candidate for `_shared/behavioral-defaults.md`.
 
 ---
 
@@ -80,6 +79,13 @@ This also applies to **behavioral defaults**: if a Defaults section bullet appea
 
 **T9. Schema Encoding** — replace conditional/procedural prose with compact notation. Use: arrow routing (`→`), pipe branching (`|`), bracket grouping (`[a,b,c]`), colon typing (`key:value`). Apply to: trigger conditions, decision routing, action lists, output structure. *Do not apply to*: nuanced judgment calls, compliance language, or any instruction where the schema would require more tokens to decode than it saves.
 
+**T10. Confidence Gate** — a final check applied before every T9 call, protecting sections from over-compression. Before encoding a Core section with T9, ask:
+- Would this save fewer than 15 tokens? → Skip T9; prose is clearer.
+- Does the section contain judgment cues ("when", "unless", "except if", "but only")? → Skip T9; schema notation loses the nuance.
+- Is the section already 3 lines or fewer? → Assign Core+short; skip all compression.
+
+T10 is not an optional polish step — it is a mandatory gate. Every T9 application requires a T10 check first. Report how many sections T10 preserved in the audit output.
+
 ---
 
 ## Technique Selection Routing
@@ -87,22 +93,27 @@ This also applies to **behavioral defaults**: if a Defaults section bullet appea
 ```
 classify(section) → technique:
   Reference    → T1 (move to references/)
-  Redundant    → delete
-  Verbose      → T6 first | then T9 if decision-tree shape | then T2/T4
-  Core+long    → T9 if decision-tree | T7 if code block | T3 if table >3 rows
-  Core+short   → preserve (already efficient; over-compression degrades quality)
+  Redundant    → delete | or T5 if shared value across skills
+  Verbose      → T6 first | then [T10 gate] T9 if decision-tree shape | then T2/T4
+  Core+long    → [T10 gate] T9 if decision-tree | T7 if code block | T3 if table >3 rows
+  Core+short   → STOP — preserve; compression risk > savings
 ```
 
-Apply T1 before all others — it removes the most tokens without any compression risk.
-Run L1 description audit first — L1 fires on every call.
+**Application order:**
+1. T1 first — removes the most tokens without any compression risk.
+2. T10 gate — check before every T9 call.
+3. T6 on remaining verbose sections.
+4. T2/T3/T4 for structural tightening.
+
+Run L1 description audit before the body — L1 fires on every call.
 
 ---
 
 ## Optimization Workflow
 
-**Single skill**: L1 audit → L2 audit → Classify → Apply (start with T1 for max impact) → Recount → Verify behavioral instructions intact → Package
+**Single skill**: L1 audit → L2 classify (Do-NOT-Compress check first) → route techniques (T1 first, T10 gate before T9) → recount → verify behavioral instructions intact → package
 
-**Skill set**: Audit all for redundancy (both reference content AND behavioral defaults) → Create `_shared/` entries → Optimize individually → Report total reduction
+**Skill set**: Audit all for redundancy (both reference content AND behavioral defaults) → create `_shared/` entries → optimize individually → report total reduction
 
 ### Benchmarks
 
@@ -114,15 +125,18 @@ Run L1 description audit first — L1 fires on every call.
 
 ---
 
-## What NOT to Compress
+## Do NOT Compress
 
-- Behavioral triggers — instructions that change what Claude does
-- Output format templates — preserve exact structure when it matters
-- "Do X, not Y" pairs — token-efficient per unit of behavioral guidance
-- Decision criteria — cutting creates brittle behavior on novel cases
-- Compliance/legal specifics — precision matters; do not paraphrase
-- **Core+short sections** — sections that are already compact and behavioral; compression risk exceeds savings; preserve as-is
-- Description triggers — optimize for trigger recall; over-tightening descriptions reduces skill activation accuracy
+These patterns are exempt from all compression techniques. The classify step must check this list first and assign `Core+short` — no technique is applied, no T9 encoding, no bullet merging, no prose shortening.
+
+- **Behavioral triggers** — instructions that change what Claude does
+- **Output format templates** — preserve exact structure when it matters
+- **"Do X, not Y" pairs** — token-efficient per unit of behavioral guidance
+- **Decision criteria** — cutting creates brittle behavior on novel cases
+- **Compliance/legal specifics** — precision matters; do not paraphrase
+- **Sections already ≤3 lines of behavioral instruction** — assigned Core+short immediately
+- **Description triggers** — optimize for trigger recall; over-tightening descriptions reduces skill activation accuracy
+- **Any section where T10 gate fires** — savings < 15 tokens, judgment cues present, or section already minimal
 
 ---
 
@@ -134,7 +148,60 @@ Skill: [name] | Current: ~[N] tokens ([lines] lines)
 L1: [char count]/1024 | trigger recall: [ok/risk] | issues: [list or none]
 Sections: [section → token count]
 Classified: [N] Core | [N] Core+short | [N] Reference | [N] Redundant | [N] Verbose
-Techniques: [list] | Estimated post-optimization: ~[N] tokens ([X]% reduction)
+T10 gates fired: [N sections skipped] | Techniques: [list] | Estimated post-opt: ~[N] tokens ([X]% reduction)
 ```
 
-**After rewrite:** before/after count | techniques applied | content that couldn't compress without quality loss | behavioral instructions confirmed intact
+**After rewrite:** before/after count | techniques applied | T10 gates fired (sections preserved, with reasons) | behavioral instructions confirmed intact
+
+---
+
+## Before/After Examples
+
+### T6 — Instruction Density
+
+**Before** (~40 tokens):
+> When analyzing product questions, you should always make sure to clearly identify who the buyer is, as this is different from the user of the product, and it matters for the recommendation.
+
+**After** (~12 tokens):
+> Always distinguish buyer vs. user vs. champion.
+
+---
+
+### T9 — Schema Encoding
+
+**Before** (~35 tokens):
+> If the section contains only reference material like benchmarks or tables of historical data, you should move it to the references folder and replace it with a pointer line in the SKILL.md.
+
+**After** (~12 tokens):
+> `Reference → T1 (move to references/)`
+
+---
+
+### T10 — Confidence Gate firing (section preserved)
+
+**Section under review** (3 lines, behavioral):
+> Diagnose the real constraint before prescribing. Stated constraints are often not the actual constraint — the real one is usually one layer beneath. Name it explicitly before recommending.
+
+**T10 check:**
+- Savings if T9 applied: ~8 tokens (below 15-token threshold)
+- Contains judgment cues: "often", "usually", "one layer beneath"
+- Section is 3 lines → Core+short
+
+**Result**: T10 gate fires. Section preserved as-is. Reported as "1 T10 gate: judgment cues + minimal savings."
+
+---
+
+### T10 — Confidence Gate not firing (T9 proceeds)
+
+**Section under review** (decision routing, 6 lines):
+> If the section is reference-only, move it to references/. If it is redundant across skills, extract it to _shared/. If it is verbose prose, apply T6 first. If it is a core behavioral section that is already short, preserve it.
+
+**T10 check:**
+- Savings if T9 applied: ~28 tokens (above threshold)
+- No judgment cues — pure routing logic
+- Section is 6 lines (not minimal)
+
+**Result**: T10 gate does not fire. T9 applied:
+```
+Reference → T1 | Redundant → T5 | Verbose → T6 | Core+short → preserve
+```
