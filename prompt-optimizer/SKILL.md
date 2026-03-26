@@ -19,15 +19,9 @@ Maximize Claude output quality per input token. Prompts suffer from over-explana
 
 ## Skill File Detection
 
-Before optimizing, check if the input is a skill file. Redirect to skill-token-optimizer if input contains any of:
-- YAML frontmatter (`---` at top with `name:` or `description:` fields)
-- Filename/path ending in `SKILL.md`
-- References to `references/prose-source.md`, `_shared/`, or L1/L2/L3 architecture
-- Behavioral framing: "when triggered, do X"
+Redirect to skill-token-optimizer if input contains any of: YAML frontmatter (`---` with `name:`/`description:`) | path ending in `SKILL.md` | references to `_shared/` or L1/L2/L3 architecture | behavioral framing ("when triggered, do X").
 
-Redirect message: *"This looks like a skill file — skill-token-optimizer is the right tool. Want me to use that instead?"*
-
-If ambiguous: ask *"Is this a skill file or a prompt you're using to call Claude?"*
+Redirect: *"This looks like a skill file — skill-token-optimizer is the right tool. Want me to use that instead?"* If ambiguous: *"Is this a skill file or a prompt you're using to call Claude?"*
 
 ---
 
@@ -55,15 +49,14 @@ If ambiguous: ask *"Is this a skill file or a prompt you're using to call Claude
 [CONSTRAINTS] Do not [anti-pattern]. Do not [hedge behavior to suppress].
 ```
 
-**Cut**: rationale for why you want output | background that doesn't change answer | politeness | redundant restatements | "think step by step" (add only if chain-of-thought genuinely helps).
-
-**Keep**: any constraint that changes output if removed | output format if non-obvious | negative constraints that prevent the most common failure mode.
+**Cut**: rationale | background that doesn't change the answer | politeness | redundant restatements | "think step by step" (add only if CoT genuinely helps).
+**Keep**: any constraint that changes output if removed | output format if non-obvious | negative constraints preventing the most common failure mode.
 
 ---
 
 ## System Prompt Architecture
 
-Token cost compounds — structure for cache efficiency.
+Token cost compounds — structure for cache efficiency. Layers 1–2 first, always. Cache hits ~10% of normal tokens; reordering cuts effective cost 40–60% on high-traffic apps.
 
 ```
 Layer 1 (cache): Role + domain + persona + output format defaults
@@ -71,42 +64,28 @@ Layer 2 (cache): Standing constraints + anti-patterns + tone rules
 Layer 3 (no cache): Session context + user preferences + live data
 ```
 
-Layers 1–2 first, always. Cache hits cost ~10% of normal tokens — reordering can cut effective cost 40–60% on high-traffic apps.
+**Rules**: Role → one sentence, domain + posture, no backstory | Constraints → bullets, imperatives only | Format → one exemplar > three paragraphs of description | Anti-patterns → "Do not X" (~3 tok) not an explanation paragraph (~40 tok).
 
-**Compression rules**: Role → one sentence, domain + posture, no backstory | Constraints → bullets, imperatives only | Format → one exemplar > three paragraphs | Anti-patterns → "Do not X" (~3 tok) not a paragraph explaining why (~40 tok).
+**Multi-turn**: System prompt = stable role + constraints + format, no session context. First turn = task + session context. Subsequent turns = new info only — trust history. Anti-pattern: restating system prompt each turn defeats caching.
 
 **Template**:
 ```
-You are [role] for [product/context]. [One sentence on posture/goal].
+You are [role] for [product/context]. [One sentence posture/goal].
 Rules:
 - [Constraint]
 - Do not [anti-pattern]
-Output format:
-[Exemplar or schema]
+Output format: [Exemplar or schema]
 ```
 
 ---
 
 ## Semantic Density Techniques
 
-**Concept pointers**: Replace explained concepts with named ones. "Structure so categories don't overlap and everything is covered" → "Apply MECE structure."
-
-**Exemplar over description**: One concrete output example > 100 words describing it.
-
-**Constraint inversion**: Describe the failure mode. "Write with conviction" → "Do not hedge or present options without a recommendation."
-
-**Output anchoring**: "Start with the recommendation, not the analysis." Eliminates preamble.
-
-**Persona loading**: Strong role declaration activates implicit behaviors — don't redundantly restate what the persona already loads.
-
----
-
-## Multi-Turn Design
-- System prompt: role + standing constraints + format. Stable. Cache-optimized. No session context.
-- First user turn: task framing + session context. Lean.
-- Subsequent turns: new info or instruction only. Trust history.
-
-Anti-pattern: restating the system prompt in every user turn — defeats caching, bloats context.
+- **Concept pointers**: Replace explained concepts with named ones Claude knows (e.g., "MECE structure" not "categories that don't overlap and cover everything")
+- **Exemplar over description**: One concrete output example > 100 words describing it
+- **Constraint inversion**: Describe the failure mode, not the desired quality ("Do not hedge" not "write with conviction")
+- **Output anchoring**: Specify the first word/phrase to eliminate preamble
+- **Persona loading**: Strong role declaration activates implicit behaviors — don't restate what the persona already loads
 
 ---
 
@@ -117,7 +96,7 @@ Anti-pattern: restating the system prompt in every user turn — defeats caching
 | Output consistency | Run 3×; variance? |
 | Format compliance | Match on first try? |
 | Failure rate | % runs needing follow-up |
-| Instruction-to-constraint ratio | >30% constraints → probably over-specified |
+| Instruction-to-constraint ratio | >30% constraints → probably over-specified; cut rationales |
 
 Target: >90% consistency across 3 runs, no follow-up required.
 
