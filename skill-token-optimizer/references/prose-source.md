@@ -18,6 +18,14 @@ Three levels — optimize each separately:
 - **Level 2: SKILL.md body** — loaded when triggered; target <500 lines; highest leverage
 - **Level 3: references/** — on-demand only; unlimited; never auto-loaded
 
+## Packaging Convention (prose-source pattern)
+
+Every skill stores its human-readable source in `references/prose-source.md`. This is the canonical edit target — written in plain prose, no compression. The `SKILL.md` body is derived from it using the compression techniques below.
+
+**Workflow**: edit `prose-source.md` first → re-encode `SKILL.md`. Never edit `SKILL.md` directly except for minor behavioral fixes; always backport changes to the prose source.
+
+Shared reference files (lookup data, competitor lists, PE context, architecture principles) live in `_shared/references/` and are loaded on-demand. Non-trivial shared files also carry a `prose-source.md` as their edit target.
+
 ---
 
 ## Audit Protocol

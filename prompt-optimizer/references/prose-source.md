@@ -1,20 +1,23 @@
----
-name: prompt-optimizer
-description: >
-  Optimizes one-shot task prompts, system prompts, and multi-turn conversation starters for
-  token efficiency and output quality. Use for: reducing prompt length without losing intent,
-  improving output consistency, fixing underspecified prompts, structuring system prompts for
-  cache efficiency, converting verbose instructions into compact high-signal prompts.
-  Trigger: "optimize this prompt", "my prompt is too long", "Claude keeps misunderstanding X",
-  "help me write a system prompt", "make this prompt cheaper", "prompt for my app".
-  Do NOT use for skill file optimization — use skill-token-optimizer instead.
----
+# Prompt Optimizer — Prose Source
+> Human-readable source. Edit here first, then re-encode SKILL.md.
+> Last updated: 2026-03-26
 
-# Prompt Optimizer
+## Purpose
 
 Maximize Claude output quality per input token. Prompts are often one-shot, user-written, and suffer from over-explanation rather than structural bloat.
 
----
+## Skill File Detection
+
+Before optimizing, check whether the input is a skill file or a prompt. If the input contains any of the following, treat it as a skill file and redirect to skill-token-optimizer rather than proceeding:
+
+- YAML frontmatter (`---` at the top, with `name:` or `description:` fields)
+- A filename or path ending in `SKILL.md`
+- References to `references/prose-source.md`, `_shared/`, or L1/L2/L3 architecture language
+- Instructions structured as "when triggered, do X" (skill behavioral framing rather than task framing)
+
+When redirecting, say: "This looks like a skill file rather than a prompt — the skill-token-optimizer is the right tool for this. Want me to use that instead?"
+
+If ambiguous (e.g., a pasted block with no frontmatter that could be either), ask: "Is this a skill file or a prompt you're using to call Claude?"
 
 ## Prompt Failure Taxonomy
 
@@ -30,8 +33,6 @@ Diagnose before optimizing:
 | Implicit audience | Mismatch in depth/tone | State the reader explicitly |
 | Missing negative space | Claude hedges where you want conviction | Add "do not X" constraints |
 
----
-
 ## One-Shot Prompt Architecture
 
 ```
@@ -42,22 +43,18 @@ Diagnose before optimizing:
 [CONSTRAINTS] Do not [anti-pattern]. Do not [hedge behavior to suppress].
 ```
 
-**Cut**: Explanation of why you want output | Background that doesn't change the answer | Politeness ("please", "could you") | Redundant restatements | "Think step by step" (add only if chain-of-thought genuinely helps).
+Cut: explanation of why you want the output | background that doesn't change the answer | politeness ("please", "could you") | redundant restatements | "think step by step" (add only if chain-of-thought genuinely helps).
 
-**Keep**: Any constraint that would change the output if removed | Output format if non-obvious | Negative constraints that prevent the most common failure mode.
-
----
+Keep: any constraint that would change the output if removed | output format if non-obvious | negative constraints that prevent the most common failure mode.
 
 ## System Prompt Architecture
 
 System prompts load on every turn — token cost compounds. Structure for cache efficiency and behavioral precision.
 
 ### Layering (stable → variable)
-```
-Layer 1 (cache): Role + domain + persona + output format defaults
-Layer 2 (cache): Standing constraints + anti-patterns + tone rules
-Layer 3 (don't cache): Session context + user preferences + live data
-```
+- Layer 1 (cache): Role + domain + persona + output format defaults
+- Layer 2 (cache): Standing constraints + anti-patterns + tone rules
+- Layer 3 (don't cache): Session context + user preferences + live data
 
 Put layers 1–2 first, always. Anthropic prompt caching means identical prefixes cost ~10% of normal tokens on cache hits. Reordering can cut effective system prompt cost 40–60% on high-traffic apps.
 
@@ -80,8 +77,6 @@ Output format:
 [Exemplar or schema]
 ```
 
----
-
 ## Semantic Density Techniques
 
 **Concept pointers**: Replace explained concepts with named ones Claude knows. "Structure so categories don't overlap and everything is covered" → "Apply MECE structure." ~20 tokens saved per instance.
@@ -94,17 +89,13 @@ Output format:
 
 **Persona loading**: Strong role declaration activates implicit behaviors. "Senior SaaS CFO advising a PE-owned portfolio company" loads financial rigor, PE awareness, exit lens, directness. Explicit instructions overlapping the loaded persona are redundant tokens.
 
----
-
 ## Multi-Turn Conversation Design
 
 - **System prompt**: Role + standing constraints + output format. Stable. Cache-optimized. No session context.
 - **First user turn**: Task framing + session context. Keep lean.
 - **Subsequent turns**: Just new information or instruction. Trust conversation history.
 
-**Anti-pattern**: Restating the system prompt in every user turn. Defeats caching and bloats context.
-
----
+Anti-pattern: Restating the system prompt in every user turn. Defeats caching and bloats context.
 
 ## Prompt Quality Metrics
 
@@ -118,10 +109,8 @@ Output format:
 
 Target: output consistency >90% across 3 runs with no follow-up required.
 
----
-
 ## Defaults
-Diagnose failure mode before rewriting | strip rationale before adding constraints | always specify output format | use exemplar for non-obvious formats | cache-order system prompts | test 3× before declaring done.
+Detect skill file before optimizing — redirect if needed | diagnose failure mode before rewriting | strip rationale before adding constraints | always specify output format | use exemplar for non-obvious formats | cache-order system prompts | test 3× before declaring done.
 
 ## Output Formats
 - **Audit**: current prompt → failure taxonomy → token count → classified waste → rewrite plan

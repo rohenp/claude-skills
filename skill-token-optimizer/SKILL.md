@@ -17,6 +17,7 @@ Maximize instruction clarity per token.
 L1: description/frontmatter → always loaded | ≤1024 chars | optimize for trigger accuracy
 L2: SKILL.md body          → loaded on trigger | target <500 lines | highest leverage
 L3: references/            → on-demand only | unlimited | never auto-loaded
+packaging: prose→references/prose-source.md | compressed→SKILL.md | shared-data→_shared/references/
 ```
 
 ---
