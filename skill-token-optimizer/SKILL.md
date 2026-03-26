@@ -3,8 +3,10 @@ name: skill-token-optimizer
 description: >
   Optimizes skill files for token efficiency without degrading instruction quality.
   Use for: audit/rewrite/compress skills, token cost reduction, context window management,
-  new skill design, skill set redundancy analysis. Trigger: "optimize this skill",
-  "reduce tokens", "compress skill", "audit token usage", "skills are getting expensive".
+  new skill design, skill set redundancy analysis.
+  Trigger: "optimize this skill", "reduce tokens", "compress skill", "audit token usage",
+  "skills are getting expensive".
+  skip: [prompt optimization, non-skill files] → prompt-optimizer
 ---
 
 # Skill Token Optimizer
@@ -30,12 +32,13 @@ packaging: prose→references/prose-source.md | compressed→SKILL.md | shared-d
 - Char count ≤1024? If over: convert sentences→CSV trigger phrases; drop narrative preamble
 - Trigger recall: does description activate on all intended queries? Over-tightening → missed triggers; optimize for recall, not brevity
 - Format: `Use for: [CSV]` | `Trigger: [CSV of literal phrases]` | no full sentences
+- T8b scan: find "Do NOT use for X, use Y" sentences → convert to `skip: [X] → Y`
 
 **L2 body classification** — classify each section first, then route to technique:
 
 ```
 classify(section):
-  IF matches Do-NOT-Compress list (see below) → Core+short; STOP — apply no technique
+  IF matches Do-NOT-Compress list → Core+short; STOP — apply no technique
   IF reference-only (lookup tables, benchmarks, competitor data) → Reference → T1
   IF appears verbatim/near-verbatim in 3+ skills → Redundant → T5 or delete
   IF prose restating structure → Redundant → delete
@@ -48,7 +51,7 @@ Behavioral defaults in 3+ skills → extract to `_shared/behavioral-defaults.md`
 
 ---
 
-## Compression Techniques (T1–T10)
+## Compression Techniques (T1–T10 + T8b)
 
 ```
 T1:  progressive-disclosure  → move lookup→references/; keep behavioral in SKILL.md [highest leverage]
@@ -61,10 +64,16 @@ T5:  shared-context          → extract repeated ctx→_shared/; replace with p
 T6:  instruction-density     → drop ["you should","make sure to","always remember to"]; use imperatives
 T7:  code-minimalism         → rm illustrative-only blocks; keep only:[exact syntax|real templates|structure-only-via-code]
 T8:  description-tightening  → triggers as CSV not sentences; verbs-first; optimize for recall not completeness
+T8b: negative-trigger-compression [L1 ONLY] → "Do NOT use for X, use Y" → `skip: [X] → Y`
+                               L1 descriptions only — body negative triggers are behavioral, do NOT compress
+                               T10 gate does not apply; savings are structural
 T9:  schema-encoding         → replace conditional/procedural prose with compact notation
-                               notation:[→routing | |branching | [grouping] | key:value typing]
+                               operators: [→routing | |branching | [grouping] | key:value typing | A&B conjunction | !X negation]
                                apply to:[trigger conditions|decision routing|action lists|output structure]
                                do NOT apply to:[nuanced judgment|compliance language|decoding costs > savings]
+                               extended examples:
+                                 behavioral & len>3 & !judgment_cues → T9
+                                 repeated≥3 & !in_behavioral_defaults → T5
 T10: confidence-gate         → before applying T9 to any Core section, check:
                                savings < 15 tokens → skip T9; prose is clearer
                                section contains judgment cues ("when","unless","except if") → skip T9
@@ -87,17 +96,32 @@ classify(section) → technique:
   Core+short   → STOP — preserve; compression risk > savings
 ```
 
-**Ordering**: T1 before all others (removes most tokens, zero risk) → T10 gate before every T9 call → T6 on remaining verbose sections → T2/T3/T4 for structural tightening.
+**Ordering**: T1 before all (removes most tokens, zero risk) → T8b on L1 negative triggers → T10 gate before every T9 → T6 on remaining verbose sections → T2/T3/T4 structural tightening.
 
-Run L1 description audit first — L1 burns tokens on every call, not just when skill triggers.
+Run L1 description audit (including T8b) first — L1 burns tokens on every call.
 
 ---
 
 ## Workflow
 
-**Single skill:** `L1 audit → L2 classify (apply Do-NOT-Compress check first) → route techniques (T1 first, T10 gate before T9) → recount → verify behavioral intact → package`
+**Single skill:** `L1 audit (T8b scan) → L2 classify (Do-NOT-Compress first) → route techniques (T1 first, T10 gate before T9) → recount → verify behavioral intact → package → append to references/audit-log.md`
 
-**Skill set:** `audit all for redundancy (reference + behavioral) → create _shared/ entries → optimize individually → report total reduction`
+**Skill set:** `audit all for redundancy (reference + behavioral) → create _shared/ entries → optimize individually → report total reduction → append audit log entries`
+
+### Audit Log Convention
+
+Append one entry to `references/audit-log.md` after every optimization run. Prevents re-classifying already-audited sections on future runs.
+
+```
+## [YYYY-MM-DD] [skill-name]
+Before: ~[N] tokens ([lines] lines)
+After:  ~[N] tokens ([lines] lines) — [X]% reduction
+Techniques: [list] | T10 gates fired: [N] (sections preserved)
+L1 changes: [description or "none"]
+Notes: [preserved sections and reasons — guides future audits]
+```
+
+Rules: append-only | name T10-preserved sections in Notes | log `Action: audit-only` when no changes made.
 
 Benchmarks:
 ```
@@ -119,6 +143,7 @@ These patterns are exempt from all compression techniques. The classify step mus
 - Compliance/legal specifics (precision > brevity)
 - Sections already ≤3 lines of behavioral instruction (Core+short)
 - Description triggers: optimize for recall — over-tightening reduces activation accuracy
+- Negative trigger clauses in SKILL.md body — behavioral instructions; T8b is L1 only
 - Any section where T10 gate fires (savings < 15 tok, judgment cues present, or already minimal)
 
 ---
@@ -127,9 +152,10 @@ These patterns are exempt from all compression techniques. The classify step mus
 
 **Audit report:**
 `Skill: [name] | Current: ~[N] tokens ([lines] lines)`
-`L1: [char count]/1024 | trigger recall: [ok/risk] | issues: [list or none]`
+`L1: [char count]/1024 | trigger recall: [ok/risk] | T8b: [N found/compressed] | issues: [list or none]`
 `Sections: [section → token count]`
 `Classified: [N] Core | [N] Core+short | [N] Reference | [N] Redundant | [N] Verbose`
 `T10 gates fired: [N sections skipped] | Techniques: [list] | Estimated post-opt: ~[N] tokens ([X]% reduction)`
+`Audit log: [appended | skipped — audit only]`
 
-**After rewrite:** `before/after count | techniques applied | T10 gates fired (sections preserved) | behavioral instructions confirmed intact`
+**After rewrite:** `before/after count | techniques applied | T10 gates fired (sections preserved) | behavioral instructions confirmed intact | audit log entry appended`

@@ -38,6 +38,7 @@ L1 is always loaded — it burns tokens on every call, not just when the skill t
 1. **Char count**: Is it ≤1024 characters? If over: convert narrative sentences to CSV trigger phrases; drop preamble.
 2. **Trigger recall**: Does the description activate on all intended queries? Over-tightening hurts recall. Optimize for accuracy, not brevity.
 3. **Format check**: Should follow `Use for: [CSV list]` | `Trigger: [CSV of literal phrases]` — no full sentences needed.
+4. **Negative trigger audit (T8b)**: Scan for "Do NOT use for X, use Y instead" sentences. Convert to `skip: [X] → Y` notation. These are L1-only — negative triggers in the body are behavioral instructions and must NOT be compressed.
 
 ### L2 Body Audit — Closed-Loop Classification
 
@@ -77,7 +78,28 @@ This also applies to **behavioral defaults**: if a Defaults section bullet appea
 
 **T8. Description Tightening** — pack trigger phrases as comma-separated lists; verbs-first ordering; full sentences waste characters. Optimize for accurate triggering and recall, not completeness.
 
-**T9. Schema Encoding** — replace conditional/procedural prose with compact notation. Use: arrow routing (`→`), pipe branching (`|`), bracket grouping (`[a,b,c]`), colon typing (`key:value`). Apply to: trigger conditions, decision routing, action lists, output structure. *Do not apply to*: nuanced judgment calls, compliance language, or any instruction where the schema would require more tokens to decode than it saves.
+**T8b. Negative Trigger Compression** *(L1 only)* — convert "Do NOT use for X, use Y instead" sentences in the description (frontmatter) to compact `skip: [X] → Y` notation. This technique applies *only* to L1 descriptions — negative trigger clauses in the SKILL.md body are behavioral instructions and must NOT be compressed. T10 gate does not apply to T8b; savings are structural, not judgment-dependent.
+
+**T9. Schema Encoding** — replace conditional/procedural prose with compact notation.
+
+*Operators:*
+- `→` routing (if/then)
+- `|` branching (or)
+- `[a,b,c]` grouping
+- `key:value` typing
+- `A & B` conjunction (both conditions must hold)
+- `!X` negation (condition must not hold)
+
+*Apply to:* trigger conditions, decision routing, action lists, output structure.
+*Do not apply to:* nuanced judgment calls, compliance language, or any instruction where decoding the schema costs more tokens than were saved.
+
+**Examples of extended T9 operators:**
+
+Before: "Apply only when the section is behavioral and longer than three lines but does not contain any judgment cues."
+After: `behavioral & len>3 & !judgment_cues → T9`
+
+Before: "Use T5 when the same content appears in three or more skills, but not when the content is a behavioral default already covered by _shared/behavioral-defaults.md."
+After: `repeated≥3 & !in_behavioral_defaults → T5`
 
 **T10. Confidence Gate** — a final check applied before every T9 call, protecting sections from over-compression. Before encoding a Core section with T9, ask:
 - Would this save fewer than 15 tokens? → Skip T9; prose is clearer.
@@ -101,19 +123,39 @@ classify(section) → technique:
 
 **Application order:**
 1. T1 first — removes the most tokens without any compression risk.
-2. T10 gate — check before every T9 call.
-3. T6 on remaining verbose sections.
-4. T2/T3/T4 for structural tightening.
+2. T8b on L1 description negative triggers (L1 only).
+3. T10 gate — check before every T9 call.
+4. T6 on remaining verbose sections.
+5. T2/T3/T4 for structural tightening.
 
-Run L1 description audit before the body — L1 fires on every call.
+Run L1 description audit (including T8b) before the body — L1 fires on every call.
 
 ---
 
 ## Optimization Workflow
 
-**Single skill**: L1 audit → L2 classify (Do-NOT-Compress check first) → route techniques (T1 first, T10 gate before T9) → recount → verify behavioral instructions intact → package
+**Single skill**: L1 audit (including T8b scan) → L2 classify (Do-NOT-Compress check first) → route techniques (T1 first, T10 gate before T9) → recount → verify behavioral instructions intact → package → **append entry to `references/audit-log.md`**
 
-**Skill set**: Audit all for redundancy (both reference content AND behavioral defaults) → create `_shared/` entries → optimize individually → report total reduction
+**Skill set**: Audit all for redundancy (both reference content AND behavioral defaults) → create `_shared/` entries → optimize individually → report total reduction → append all entries to audit logs
+
+### Audit Log Convention
+
+Every optimization run appends one entry to `references/audit-log.md` in the affected skill's folder. This prevents re-classifying already-audited sections on future runs and provides a change history.
+
+**Entry format:**
+```
+## [YYYY-MM-DD] [skill-name]
+Before: ~[N] tokens ([lines] lines)
+After:  ~[N] tokens ([lines] lines) — [X]% reduction
+Techniques: [T1, T6, ...] | T10 gates fired: [N] (sections preserved)
+L1 changes: [description or "none"]
+Notes: [anything worth knowing for future audits]
+```
+
+**Rules:**
+- Append only — never edit or delete prior entries.
+- If a section was explicitly preserved (T10 gate or Do-NOT-Compress), name it in Notes so future runs skip re-classifying it.
+- If no optimization was performed (audit only, no changes), log as `Action: audit-only`.
 
 ### Benchmarks
 
@@ -136,6 +178,7 @@ These patterns are exempt from all compression techniques. The classify step mus
 - **Compliance/legal specifics** — precision matters; do not paraphrase
 - **Sections already ≤3 lines of behavioral instruction** — assigned Core+short immediately
 - **Description triggers** — optimize for trigger recall; over-tightening descriptions reduces skill activation accuracy
+- **Negative trigger clauses in SKILL.md body** — these are behavioral instructions; T8b applies to L1 only
 - **Any section where T10 gate fires** — savings < 15 tokens, judgment cues present, or section already minimal
 
 ---
@@ -145,13 +188,14 @@ These patterns are exempt from all compression techniques. The classify step mus
 **Audit report:**
 ```
 Skill: [name] | Current: ~[N] tokens ([lines] lines)
-L1: [char count]/1024 | trigger recall: [ok/risk] | issues: [list or none]
+L1: [char count]/1024 | trigger recall: [ok/risk] | T8b: [N negative triggers found/compressed] | issues: [list or none]
 Sections: [section → token count]
 Classified: [N] Core | [N] Core+short | [N] Reference | [N] Redundant | [N] Verbose
 T10 gates fired: [N sections skipped] | Techniques: [list] | Estimated post-opt: ~[N] tokens ([X]% reduction)
+Audit log: [appended | skipped — audit only]
 ```
 
-**After rewrite:** before/after count | techniques applied | T10 gates fired (sections preserved, with reasons) | behavioral instructions confirmed intact
+**After rewrite:** before/after count | techniques applied | T10 gates fired (sections preserved, with reasons) | behavioral instructions confirmed intact | audit log entry appended
 
 ---
 
@@ -167,6 +211,16 @@ T10 gates fired: [N sections skipped] | Techniques: [list] | Estimated post-opt:
 
 ---
 
+### T8b — Negative Trigger Compression (L1 description only)
+
+**Before** (~22 tokens, in description frontmatter):
+> Do NOT use for skill file optimization — use skill-token-optimizer instead.
+
+**After** (~8 tokens):
+> `skip: [skill files] → skill-token-optimizer`
+
+---
+
 ### T9 — Schema Encoding
 
 **Before** (~35 tokens):
@@ -174,6 +228,16 @@ T10 gates fired: [N sections skipped] | Techniques: [list] | Estimated post-opt:
 
 **After** (~12 tokens):
 > `Reference → T1 (move to references/)`
+
+---
+
+### T9 extended — Conjunction & negation operators
+
+**Before** (~28 tokens):
+> Apply T9 only when the section is behavioral and longer than three lines, but only if it does not contain any judgment cues.
+
+**After** (~10 tokens):
+> `behavioral & len>3 & !judgment_cues → T9`
 
 ---
 
@@ -204,4 +268,19 @@ T10 gates fired: [N sections skipped] | Techniques: [list] | Estimated post-opt:
 **Result**: T10 gate does not fire. T9 applied:
 ```
 Reference → T1 | Redundant → T5 | Verbose → T6 | Core+short → preserve
+```
+
+---
+
+### Audit Log Example
+
+**`references/audit-log.md` entry:**
+```
+## 2026-03-26 engineering-strategy
+Before: ~1070 tokens (106 lines)
+After:  ~820 tokens (84 lines) — 23% reduction
+Techniques: T6 (anti-patterns block), T2 (well-structured bullets), T6 (modernization preamble)
+T10 gates fired: 3 (velocity-metrics table — Core+short; DD simulation checklist — judgment cues; defaults — ≤3 lines each)
+L1 changes: none
+Notes: Velocity metrics table is Core+short — do not compress. DD simulation checklist contains judgment cues ("comfortable with"), T10 fires. Defaults bullets all ≤3 lines, preserve.
 ```
