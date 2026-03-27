@@ -5,7 +5,8 @@ description: >
   Use for: audit/rewrite/compress skills, token cost reduction, context window management,
   new skill design, skill set redundancy analysis.
   Trigger: "optimize this skill", "reduce tokens", "compress skill", "audit token usage",
-  "skills are getting expensive".
+  "skills are getting expensive", creating a new skill, editing an existing skill, updating a skill.
+  Auto-trigger: always run as a final step after any skill is created, edited, or updated.
   skip: [prompt optimization, non-skill files] → prompt-optimizer
 ---
 
@@ -112,12 +113,41 @@ For before/after examples → `references/prose-source.md`
 
 ---
 
+## Skill Creation & Edit Integration
+
+**Always run as a final step** after any skill is created, edited, or updated — even if optimization wasn't explicitly requested.
+
+Trigger conditions (auto-apply):
+- New skill written → full audit before packaging/presenting
+- Existing skill edited → re-audit changed sections + L1
+- Skill description updated → L1 audit only (T8b+T8 + recall check)
+
+Steps:
+1. Complete the create/edit task
+2. Create or update `references/prose-source.md` to match all changes
+3. Run audit protocol on resulting SKILL.md
+4. Apply techniques where warranted (never compress DNC sections)
+5. Report: before/after token counts + techniques applied
+6. Savings <5% & no L1 issues → note "already efficient"; skip rewrite
+
+---
+
 ## Workflow
 
 **Single skill:** `audit-log? → L1(T8b+T8) → L2 classify+route(T1 first; ?(T10)→T9) → recount → verify → sync prose-source → log`
 
 **Set:** `redundancy(ref+behavioral) → _shared/ → optimize each → report → log`
 redundancy detection: compare Defaults+pointer lines across skills; flag verbatim ≥10 tok matches
+
+### prose-source sync (mandatory)
+
+Every change to SKILL.md — whether from optimization, editing, or creation — MUST be reflected in `references/prose-source.md`.
+
+- New skill: create `references/prose-source.md` as the human-readable source before or alongside writing SKILL.md
+- Edit to SKILL.md: backport all changes to prose-source immediately after
+- Never let SKILL.md and prose-source diverge
+
+prose-source is the canonical edit target. SKILL.md is derived from it. If they differ, prose-source wins.
 
 ### Audit Log Convention
 

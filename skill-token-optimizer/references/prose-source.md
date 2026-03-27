@@ -1,7 +1,7 @@
 # Skill Token Optimizer — Prose Source
 > This is the human-readable reference version. The loaded SKILL.md uses schema-encoded compression (T9).
 > Edit this file first when making changes, then re-encode SKILL.md from it.
-> Last updated: 2026-03-26 v2 (encoding review: operator grammar formalized, inline guard X?(f), subject grammar, else:[] precedence, fallthrough row, T4/T8 routing, judgment-cues sync, benchmark consistency)
+> Last updated: 2026-03-27 v3 (added Skill Creation & Edit Integration section; updated L1 description with auto-trigger for skill create/edit/update workflows)
 
 ---
 
@@ -43,7 +43,7 @@ L1 is always loaded — it burns tokens on every call, not just when the skill t
 
 1. **Char count**: Is it ≤1024 characters? If over: convert narrative sentences to CSV trigger phrases; drop preamble.
 2. **Trigger recall**: Does the description activate on all intended queries? Over-tightening hurts recall. Optimize for accuracy, not brevity.
-3. **Format check**: Should follow `Use for: [CSV list]` | `Trigger: [CSV of literal phrases]` — no full sentences needed.
+3. **Format check**: Should follow `Use for: [CSV list]` | `Trigger: [CSV of literal phrases]` | `Auto-trigger: [conditions]` — no full sentences needed.
 4. **Negative trigger audit (T8b)**: Scan for "Do NOT use for X, use Y instead" sentences. Convert to `skip: [X] → Y` notation. These are L1-only — negative triggers in the body are behavioral instructions and must NOT be compressed.
 5. **Description tightening (T8)**: After T8b, tighten remaining L1 phrases. Pack as comma-separated lists; verbs-first ordering; strip any narrative preamble not caught by T8b. Optimize for recall, not completeness.
 
@@ -157,11 +157,42 @@ Run L1 description audit (including T8b) before the body — L1 fires on every c
 
 ---
 
+## Skill Creation & Edit Integration
+
+This optimizer should run automatically as a final step after any skill is created, edited, or updated — even when the user did not explicitly request optimization. The goal is to ensure every skill shipped meets token-efficiency standards by default.
+
+**When to auto-trigger:**
+- A new skill has been written → run a full audit before packaging or presenting the skill
+- An existing skill has been edited → re-audit the changed sections plus the L1 description
+- Only the skill description was updated → run L1 audit only (T8b + T8 pass, recall check)
+
+**Steps:**
+1. Complete the create/edit task as normal
+2. Create or update `references/prose-source.md` to reflect all changes made
+3. Run the audit protocol on the resulting SKILL.md
+4. Apply techniques where warranted — never compress Do-NOT-Compress sections
+5. Report before/after token counts and techniques applied
+6. If savings are less than 5% and there are no L1 issues, note "already efficient" and skip the rewrite
+
+This integration requirement is also reflected in the L1 description with an explicit `Auto-trigger` line so the skill activates in skill creation and editing contexts without a separate request.
+
+---
+
 ## Optimization Workflow
 
-**Single skill**: `check audit-log → L1 audit (T8b scan) → L2 unified classify+route (T1 first, ?(T10) before T9) → recount → verify behavioral instructions intact → package → append entry to references/audit-log.md`
+**Single skill**: `check audit-log → L1 audit (T8b scan) → L2 unified classify+route (T1 first, ?(T10) before T9) → recount → verify behavioral instructions intact → sync prose-source → package → append entry to references/audit-log.md`
 
 **Skill set**: Audit all for redundancy (both reference content AND behavioral defaults) → create `_shared/` entries → optimize individually → report total reduction → append all entries to audit logs
+
+### prose-source sync (mandatory)
+
+Every change to a skill — creation, editing, or optimization — must be reflected in `references/prose-source.md`. This is a non-negotiable step, not an optional cleanup.
+
+- **New skill**: create `references/prose-source.md` as the human-readable source before or alongside writing SKILL.md. prose-source is the canonical edit target; SKILL.md is derived from it.
+- **Edit to SKILL.md**: backport all changes to prose-source immediately after editing. Never let the two files diverge.
+- **Optimization run**: update prose-source to match any sections rewritten by compression techniques.
+
+If SKILL.md and prose-source ever differ, prose-source is treated as the source of truth.
 
 ### Audit Log Convention
 
