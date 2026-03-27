@@ -20,32 +20,47 @@ L1: description/frontmatter → always loaded | ≤1024 chars | optimize for tri
 L2: SKILL.md body          → loaded on trigger | target <500 lines | highest leverage
 L3: references/            → on-demand only | unlimited | never auto-loaded
 packaging: prose→references/prose-source.md | compressed→SKILL.md | shared-data→_shared/references/
+L2 <200 tok: audit L1 only — body is likely Core+short throughout; compression floor reached
 ```
 
 ---
 
 ## Audit Protocol
 
-**Measure first**: `total_tokens=(word_count÷0.75)` | tokens_by_section | count:[headers,bullets,tables,code_blocks]
+> audit-log: skip ⊘T9-preserved & DNC sections (named in Notes).
+
+**Measure first**: `L1=char_count÷1024 | L2=word_count÷0.75` | tokens_by_section | count:[headers,bullets,tables,code_blocks]
 
 **L1 description audit** (run before body audit):
 - Char count ≤1024? If over: convert sentences→CSV trigger phrases; drop narrative preamble
 - Trigger recall: does description activate on all intended queries? Over-tightening → missed triggers; optimize for recall, not brevity
 - Format: `Use for: [CSV]` | `Trigger: [CSV of literal phrases]` | no full sentences
 - T8b scan: find "Do NOT use for X, use Y" sentences → convert to `skip: [X] → Y`
+- T8 pass: tighten remaining L1 phrases; verbs-first; strip narrative preamble not caught by T8b
+- dedup: remove trigger phrases with >80% semantic overlap (e.g. "compress skill" ≈ "optimize this skill")
 
-**L2 body classification** — classify each section first, then route to technique:
+**L2 body — unified classify + route** (one pass; stop at first match):
 
 ```
-classify(section):
-  IF matches Do-NOT-Compress list → Core+short; STOP — apply no technique
-  IF reference-only (lookup tables, benchmarks, competitor data) → Reference → T1
-  IF appears verbatim/near-verbatim in 3+ skills → Redundant → T5 or delete
-  IF prose restating structure → Redundant → delete
-  IF behavioral, already ≤3 lines → Core+short; STOP
-  IF behavioral, >3 lines → Core+long → route to technique selection
-  IF verbose prose (rationale, preamble, hedges) → Verbose → T6 first
+Subject grammar: s∈Set=membership  s=Type=type-equality  s.prop=property-access
+Operator grammar: →=route  |=branch  []=group  &=and  !=not  ?(c):T|F=ternary  X?(f)=inline-guard  else:[]=else-group
+
+s∈Do-NOT-Compress                          → Core+short; STOP
+s=reference [lookup|benchmarks|comp data]  → T1 (move to references/)
+s.repeated≥3 & !behavioral                → T5 | delete  [!behavioral=reference/context; not changing Claude's actions]
+s=prose restating structure               → delete
+s=behavioral & len≤3                      → Core+short; STOP
+s=behavioral & len>3                      → ?(T10:saves≥15 & !judgment_cues):T9 | else:[T7?(code) | T3?(table>3r)]
+s=verbose [rationale|preamble|hedges]     → T6 → ?(T10:saves≥15 & !judgment_cues):T9 | else:[T2 | T4]
+s=defaults [pipe-separated imperatives]   → Core+short; STOP
+s=anti-pattern ["X"|"Y"|...]              → Core+short; STOP  (Do-X-not-Y → DNC)
+s=output-format [key→field|field]         → Core+short; STOP  (never compress output templates)
+s=examples [before/after|worked]          → ?(s.count≤3 & s.size≤50tok):keep | T1
+s=pointer [See .../references/...]        → verify T1 done; s.count>1 → T4
+s=other                                   → Core+short; STOP  (safe fallthrough)
 ```
+
+`⊘T9` = T10 gate fired; section preserved.
 
 Behavioral defaults in 3+ skills → extract to `_shared/behavioral-defaults.md`
 
@@ -55,86 +70,83 @@ Behavioral defaults in 3+ skills → extract to `_shared/behavioral-defaults.md`
 
 ```
 T1:  progressive-disclosure  → move lookup→references/; keep behavioral in SKILL.md [highest leverage]
+                               T1 when: s.size>50tok | s.changes_frequently | s=lookup-only
 T2:  bullet-compression      → strip preamble; merge same-parent bullets; cut header-restate bullets
-T3:  table-compression       → shorten headers 1-2 words; abbrev; rm identical cols; <3rows→bullets
+                               headers: shorten to ≤3 words; drop parentheticals
+T3:  table-compression       → shorten headers 1-2 words; abbrev; rm identical cols; <3rows→bullets; >4cols→split|drop-lowest-value
 T4:  section-consolidation   → merge thin same-theme sections; inline pipe lists for grouped metrics
+                               pair with T2 on verbose sections; T4 fires when sections share a theme
 T5:  shared-context          → extract repeated ctx→_shared/; replace with pointer line
-                               (e.g. 5skills × 300tok × 200loads/mo = 300K wasted tok/mo)
-                               also applies to behavioral defaults repeated verbatim across skills
+                               [5sk×300tok×200/mo=300K wasted/mo; incl. behavioral defaults]
+                               check T5 before T4 — if content is cross-skill, T5 not T4
 T6:  instruction-density     → drop ["you should","make sure to","always remember to"]; use imperatives
+                               guard: never strip negation prefixes [Do NOT | never | avoid]
 T7:  code-minimalism         → rm illustrative-only blocks; keep only:[exact syntax|real templates|structure-only-via-code]
-T8:  description-tightening  → triggers as CSV not sentences; verbs-first; optimize for recall not completeness
+                               illustrative=[...]/placeholder-only blocks; exact=runnable|substitutable
+T8:  description-tightening  [L1] → tighten remaining phrases after T8b; verbs-first; strip preamble
 T8b: negative-trigger-compression [L1 ONLY] → "Do NOT use for X, use Y" → `skip: [X] → Y`
-                               L1 descriptions only — body negative triggers are behavioral, do NOT compress
-                               T10 gate does not apply; savings are structural
+                               [L1 only; body neg-triggers=behavioral→preserve; T10 n/a]
 T9:  schema-encoding         → replace conditional/procedural prose with compact notation
-                               operators: [→routing | |branching | [grouping] | key:value typing | A&B conjunction | !X negation]
-                               apply to:[trigger conditions|decision routing|action lists|output structure]
-                               do NOT apply to:[nuanced judgment|compliance language|decoding costs > savings]
-                               extended examples:
-                                 behavioral & len>3 & !judgment_cues → T9
-                                 repeated≥3 & !in_behavioral_defaults → T5
-T10: confidence-gate         → before applying T9 to any Core section, check:
-                               savings < 15 tokens → skip T9; prose is clearer
-                               section contains judgment cues ("when","unless","except if") → skip T9
-                               section already ≤3 lines → Core+short; skip all compression
-                               apply T10 as final gate before every T9 call
+     operators:
+       []  grouping
+       k:v key:value typing
+       &   conjunction (both must hold)
+       !X  negation
+       ?(c):T|F  ternary gate (prefix) — true-branch first operand after :; else-chain after first |
+       X?(f)     inline guard (postfix) — apply X only when filter f is true; e.g. T7?(code)
+     apply to:[trigger conditions|decision routing|action lists|output structure|classify tables|workflow steps]
+     do NOT apply to:[nuanced judgment|compliance language|decoding costs > savings]
+     examples:
+       behavioral & len>3 & !judgment_cues → T9
+       repeated≥3 & !in_behavioral_defaults → T5
+       ?(T10:saves≥15 & !judgment_cues):T9 | else:[T7?(code)|T3?(table>3r)]
+       s=verbose & len>5 → T6 first; then ?(T10:saves≥15 & !judgment_cues):T9  [chain: never skip T6]
+T10: confidence-gate [⊘T9]  → mandatory gate before every T9 call:
+                               saves<15 tok → ⊘T9 (prose clearer)
+                               judgment cues ["when","unless","except if","but only"] present → ⊘T9
+                               section ≤3 lines → Core+short; ⊘T9
+                               report ⊘T9 count in audit output and log
 ```
 
 For before/after examples → `references/prose-source.md`
 
 ---
 
-## Technique Selection Routing
-
-```
-classify(section) → technique:
-  Reference    → T1 (move to references/)
-  Redundant    → delete | or T5 if shared value across skills
-  Verbose      → T6 first | then [T10 gate] T9 if decision-tree shape | then T2/T4
-  Core+long    → [T10 gate] T9 if decision-tree | T7 if code block | T3 if table >3 rows
-  Core+short   → STOP — preserve; compression risk > savings
-```
-
-**Ordering**: T1 before all (removes most tokens, zero risk) → T8b on L1 negative triggers → T10 gate before every T9 → T6 on remaining verbose sections → T2/T3/T4 structural tightening.
-
-Run L1 description audit (including T8b) first — L1 burns tokens on every call.
-
----
-
 ## Workflow
 
-**Single skill:** `L1 audit (T8b scan) → L2 classify (Do-NOT-Compress first) → route techniques (T1 first, T10 gate before T9) → recount → verify behavioral intact → package → append to references/audit-log.md`
+**Single skill:** `audit-log? → L1(T8b+T8) → L2 classify+route(T1 first; ?(T10)→T9) → recount → verify → sync prose-source → log`
 
-**Skill set:** `audit all for redundancy (reference + behavioral) → create _shared/ entries → optimize individually → report total reduction → append audit log entries`
+**Set:** `redundancy(ref+behavioral) → _shared/ → optimize each → report → log`
+redundancy detection: compare Defaults+pointer lines across skills; flag verbatim ≥10 tok matches
 
 ### Audit Log Convention
-
-Append one entry to `references/audit-log.md` after every optimization run. Prevents re-classifying already-audited sections on future runs.
 
 ```
 ## [YYYY-MM-DD] [skill-name]
 Before: ~[N] tokens ([lines] lines)
 After:  ~[N] tokens ([lines] lines) — [X]% reduction
-Techniques: [list] | T10 gates fired: [N] (sections preserved)
+Techniques: [list] | ⊘T9: [N] (sections preserved)
 L1 changes: [description or "none"]
 Notes: [preserved sections and reasons — guides future audits]
 ```
 
-Rules: append-only | name T10-preserved sections in Notes | log `Action: audit-only` when no changes made.
+Rules: append-only | name ⊘T9-preserved sections in Notes | log `Action: audit-only` when no changes made.
 
 Benchmarks:
 ```
-narrow/focused:  500–800 tok  → target <300–500
-domain-expert:   1500–2500    → target 800–1200
-comprehensive:   2500–4000    → target 1200–1800
+narrow/focused:  500–800 tok  → target <300–500  | first: T1→T6→T8b+T8 | if over: T3→T2
+domain-expert:   1500–2500    → target 800–1200   | first: T1→T5→T6     | if over: ?(T10):T9→T3
+comprehensive:   2500–4000    → target 1200–1800  | first: T1→T5→T6     | if over: ?(T10):T9 then T7?(code)
+>2500 before T1: consider split — skill may be too broad to compress effectively
+  split on: distinct audience | distinct trigger set | domain boundary
+new skill: write prose-source.md first; target narrow/focused bracket (<500 tok)
 ```
 
 ---
 
 ## Do NOT Compress
 
-These patterns are exempt from all compression techniques. The classify step must check this list first and assign Core+short — no technique is applied.
+Classify checks this list first — match → Core+short; STOP. No technique applied.
 
 - Behavioral triggers (change what Claude does)
 - Output format templates (exact structure matters)
@@ -144,18 +156,19 @@ These patterns are exempt from all compression techniques. The classify step mus
 - Sections already ≤3 lines of behavioral instruction (Core+short)
 - Description triggers: optimize for recall — over-tightening reduces activation accuracy
 - Negative trigger clauses in SKILL.md body — behavioral instructions; T8b is L1 only
-- Any section where T10 gate fires (savings < 15 tok, judgment cues present, or already minimal)
+- Any section where T10 gate fires (⊘T9)
+- Worked examples that are the sole demonstration of a technique (compressing loses training signal)
 
 ---
 
 ## Output Format
 
 **Audit report:**
-`Skill: [name] | Current: ~[N] tokens ([lines] lines)`
-`L1: [char count]/1024 | trigger recall: [ok/risk] | T8b: [N found/compressed] | issues: [list or none]`
+`Skill: [name] | L1: ~[N] tok | L2: ~[N] tok ([lines] lines) | top: [biggest-section]`
+`L1: [char count]/1024 | recall: [ok/risk] | T8b: [N] | issues: [over-1024|low-recall|none]`
 `Sections: [section → token count]`
 `Classified: [N] Core | [N] Core+short | [N] Reference | [N] Redundant | [N] Verbose`
-`T10 gates fired: [N sections skipped] | Techniques: [list] | Estimated post-opt: ~[N] tokens ([X]% reduction)`
-`Audit log: [appended | skipped — audit only]`
+`⊘T9: [N] | Techniques: [list] | Post-opt: ~[N] tok ([X]%)`
+`Audit log: [appended | audit-only]`
 
-**After rewrite:** `before/after count | techniques applied | T10 gates fired (sections preserved) | behavioral instructions confirmed intact | audit log entry appended`
+**After rewrite:** `before/after count | techniques applied | ⊘T9 fired (sections preserved) | behavioral instructions confirmed intact | audit log entry appended`
